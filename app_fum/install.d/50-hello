@@ -1,0 +1,34 @@
+#!/bin/bash
+
+apt-get install -y nginx nodejs
+
+cd /root
+
+wget https://downloads.mongodb.com/compass/mongodb-mongosh_1.0.0_amd64.deb
+apt-get install ./mongodb-mongosh_1.0.0_amd64.deb
+rm mongodb-mongosh_1.0.0_amd64.deb
+
+wget https://nodejs.org/dist/v14.17.3/node-v14.17.3-linux-x64.tar.xz
+tar -xf node-v14.17.3-linux-x64.tar.xz
+mv node-v14.17.3-linux-x64 node
+
+mkdir codes
+cd codes
+git clone https://github.com/MohammadMRD/system-information.git
+git clone https://github.com/SayidHosseini/authentiq.git
+
+cd system-information
+/root/node/bin/npm install
+
+cd ../authentiq
+/root/node/bin/npm install
+
+rm /root/node-v14.17.3-linux-x64.tar.xz
+cp /tmp/in_target.d/install.d/nginx.conf /etc/nginx/
+
+mkdir /root/codes/mongodb
+cp /tmp/in_target.d/install.d/mongowait.js /root/codes/mongodb
+cp /tmp/in_target.d/install.d/start_auth.sh /root/codes/
+cp /tmp/in_target.d/install.d/start_sys.sh /root/codes/
+cp /tmp/in_target.d/install.d/authentiq.service /etc/systemd/system/
+cp /tmp/in_target.d/install.d/systeminfo.service /etc/systemd/system/

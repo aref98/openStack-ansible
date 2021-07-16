@@ -1,0 +1,9 @@
+[Unit]
+Description=Authentiq
+
+[Service]
+ExecStart=/bin/bash /root/codes/start_auth.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

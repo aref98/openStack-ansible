@@ -1,0 +1,9 @@
+[Unit]
+Description=System Info
+
+[Service]
+ExecStart=/bin/bash /root/codes/start_sys.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
