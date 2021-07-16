@@ -1,0 +1,68 @@
+heat_template_version: 2015-04-30
+
+resources:
+  private_network:
+    type: OS::Neutron::Net
+    properties:
+      name: auth_app
+      shared: false
+  
+  private_subnet:
+    type: OS::Neutron::Subnet
+    depends_on: private_network
+    properties:
+      allocation_pools: 
+        - start: 192.168.65.16
+          end: 192.168.65.31
+      cidr: 192.168.65.0/26
+      enable_dhcp: true
+      name: private_subnet
+      network: { get_resource: private_network }
+  cloud_router:
+    type: OS::Neutron::Router
+    properties:
+      external_gateway_info: 
+        network: public
+      name: cloud_router
+  cloud_router_private_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router: { get_resource: cloud_router }
+      subnet: { get_resource: private_subnet }
+  app:
+    type: OS::Heat::ResourceGroup
+    depends_on: 
+      - mongodb
+      - private_subnet
+    properties:
+      count: 3
+      resource_def:
+        type: OS::Nova::Server
+        properties:
+          name: app_%index%
+          image: APP2
+          flavor: min
+          key_name: hosein
+          networks:
+            - network: { get_resource: private_network }
+          security_groups:
+            - default
+            - ssh
+            - HTTP
+          user_data: |
+            #!/bin/bash
+            echo "192.168.65.5 authentiq-db" >> /etc/hosts
+  mongodb:
+    type: OS::Nova::Server
+    depends_on: private_subnet
+    properties:
+      flavor: min
+      image: MongoDB 4.4
+      key_name: hosein
+      name: mongodb
+      networks: 
+        - network: { get_resource: private_network }
+          fixed_ip: "192.168.65.5"
+      security_groups: 
+        - default
+        - ssh
