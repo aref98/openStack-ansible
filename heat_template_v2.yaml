@@ -6,7 +6,7 @@ resources:
     properties:
       name: auth_app
       shared: false
-  
+   
   private_subnet:
     type: OS::Neutron::Subnet
     depends_on: private_network
