@@ -1,0 +1,182 @@
+heat_template_version: 2015-04-30
+
+resources:
+  private_network:
+    type: OS::Neutron::Net
+    properties:
+      name: auth_app
+      shared: false
+  
+  private_subnet:
+    type: OS::Neutron::Subnet
+    depends_on: private_network
+    properties:
+      allocation_pools: 
+        - start: 192.168.65.16
+          end: 192.168.65.31
+      cidr: 192.168.65.0/26
+      enable_dhcp: true
+      name: private_subnet
+      network: { get_resource: private_network }
+  cloud_router:
+    type: OS::Neutron::Router
+    properties:
+      external_gateway_info: 
+        network: public
+      name: cloud_router
+  cloud_router_private_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router: { get_resource: cloud_router }
+      subnet: { get_resource: private_subnet }
+   
+  load_balancer:
+    type: OS::Octavia::LoadBalancer
+    depends_on: private_subnet
+    properties:
+      name: fum_cloud_load_balancer
+      vip_subnet: { get_resource: private_subnet }
+  load_balancer_listener:
+    type: OS::Octavia::Listener
+    properties:
+      loadbalancer: { get_resource: load_balancer }
+      protocol: HTTP
+      protocol_port: 80
+  
+  load_balancer_pool:
+    type: OS::Octavia::Pool
+    properties:
+      lb_algorithm: ROUND_ROBIN
+      listener: { get_resource: load_balancer_listener }
+      loadbalancer: { get_resource: load_balancer }
+      protocol: HTTP
+
+  pool_member_1:
+    type: OS::Octavia::PoolMember
+    properties:
+      address: { get_attr: [app_1, networks, private_network, 0]}
+      pool: { get_resource: load_balancer_pool }
+      protocol_port: 80
+      subnet: { get_resource: private_subnet }
+      weight: 1
+
+  pool_member_2:
+    type: OS::Octavia::PoolMember
+    properties:
+      address: { get_attr: [app_2, networks, private_network, 0]}
+      pool: { get_resource: load_balancer_pool }
+      protocol_port: 80
+      subnet: { get_resource: private_subnet }
+      weight: 1
+  
+  pool_member_3:
+    type: OS::Octavia::PoolMember
+    properties:
+      address: { get_attr: [app_3, networks, private_network, 0]}
+      pool: { get_resource: load_balancer_pool }
+      protocol_port: 80
+      subnet: { get_resource: private_subnet }
+      weight: 1
+          
+  load_balancer_health_check:
+    type: OS::Octavia::HealthMonitor
+    properties:
+      delay: 1000
+      expected_codes: 200
+      http_method: GET
+      max_retries: 5
+      pool: { get_resource: load_balancer_pool }
+      timeout: 1000
+      type: HTTP
+      url_path: /authentiq/v1/heartbeatString
+      # for the key
+  key_pair:
+    type: OS::Nova::KeyPair
+    properties:
+      name: cloudKey
+      public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC89rw3RJfystxLeeEtogwabYWZ25Q3Jbbrpj2APd10oUjXCBNEAWebhuV8O6Rp7Y9sAhARCEHZVV86Ef5IR7Os9uOxI0K5xHXGRnznnnh7QYWLawJqdXuBDeIIlRGOhyEM9RqqqeZztEyLfrizWLVyrxS3wepg+Mnz6JZZq3wjlDRJLqvx0t5wjcg/9IUu46sDusGYCxgW1sRAvyI15cPvFEzKh8KvMNxuHNTBCJHtSnJ9Srp3afjYC22NMax4wwpUYWbfswAcKQMxp0F1PaXX60v85XRS/DiPpCgwvA5KenLQdBzOdqTs/ZoDV6af0/q3w+Y3CUr0c/nASc8U0fkNb2RVwDSBf2Dk1v8wUmV3tJbNdJA+F5TdaxiiPMm5vge8OKuVe+aZNLBRoZ5SO6aP2zsQyTdO55orpqPlyzvYu7g2pQ4s3vbqzkhwBvys/kYLGsi/+RPNCC8oB/YPDFmipZV+yyfaFe64ZkY0UcpYotDRlTv0Z41rCuYbDu/obn8= aref\aref@Aref
+      save_private_key: true
+
+    # for the flavor
+  # flavor_cloud:
+  #   type: OS::Nova::Flavor
+  #   properties:
+  #     disk: 10
+  #     ephemeral: 1
+  #     is_public: false
+  #     name: min
+  #     ram: 2
+  #     swap: 20
+  #     tenants: [app_1, app_2,app_3,mongodb]
+  #     vcpus: 1
+
+  security_groups:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: String
+      name: securedCloud
+      rules: [{remote_ip_prefix: 0.0.0.0/0,protocol: tcp,port_range_min: 22,port_range_max: 22},{remote_ip_prefix: 0.0.0.0/0,protocol: icmp}]
+
+  # the_resource:
+  #   type: OS::Heat::ScalingPolicy
+  #   properties:
+  #     adjustment_type: percentage
+  #     auto_scaling_group_id: String
+  #     cooldown: Number
+  #     min_adjustment_step: Integer
+  #     scaling_adjustment: Number
+
+  app_1:
+    type: OS::Nova::Server
+    properties:
+      name: app_1
+      image: App
+      flavor: database
+      key_name: { get_resource: key_pair}
+      networks:
+        - network: { get_resource: private_network }
+      security_groups: { get_resource: security_groups }
+  
+      user_data: |
+        #!/bin/bash
+        echo "192.168.65.5 authentiq-db" >> /etc/hosts
+  
+  app_2:
+    type: OS::Nova::Server
+    properties:
+      name: app_2
+      image: App
+      flavor: database
+      key_name: { get_resource: key_pair}
+      networks:
+        - network: { get_resource: private_network }
+      security_groups: { get_resource: security_groups }
+      user_data: |
+        #!/bin/bash
+        echo "192.168.65.5 authentiq-db" >> /etc/hosts
+  app_3:
+    type: OS::Nova::Server
+    properties:
+      name: app_3 
+      image: App
+      flavor: database
+      key_name: { get_resource: key_pair}
+      networks:
+        - network: { get_resource: private_network }
+      security_groups: { get_resource: security_groups }
+      user_data: |
+        #!/bin/bash
+        echo "192.168.65.5 authentiq-db" >> /etc/hosts
+
+  mongodb:
+    type: OS::Nova::Server
+    depends_on: private_subnet
+    properties:
+      flavor: database
+      image: MongoDB 4.4
+      key_name: { get_resource: key_pair}
+      name: mongodb
+      networks: 
+        - network: { get_resource: private_network }
+          fixed_ip: "192.168.65.5"
+      security_groups: { get_resource: security_groups }
