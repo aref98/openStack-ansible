@@ -1,0 +1,2 @@
+systemctl enable authentiq.service
+systemctl enable systeminfo.service
