@@ -29,40 +29,183 @@ resources:
     properties:
       router: { get_resource: cloud_router }
       subnet: { get_resource: private_subnet }
-  app:
-    type: OS::Heat::ResourceGroup
+  
+  load_balancer:
+    type: OS::Octavia::LoadBalancer
     depends_on: 
       - mongodb
+      - app_1
+      - app_2
       - private_subnet
     properties:
-      count: 3
-      resource_def:
-        type: OS::Nova::Server
-        properties:
-          name: app_%index%
-          image: APP2
-          flavor: min
-          key_name: hosein
-          networks:
-            - network: { get_resource: private_network }
-          security_groups:
-            - default
-            - ssh
-            - HTTP
-          user_data: |
-            #!/bin/bash
-            echo "192.168.65.5 authentiq-db" >> /etc/hosts
+      name: fum_cloud_load_balancer
+      vip_subnet: { get_resource: private_subnet }
+  
+  load_balancer_listener:
+    type: OS::Octavia::Listener
+    depends_on: load_balancer
+    properties:
+      loadbalancer: { get_resource: load_balancer }
+      protocol: HTTP
+      protocol_port: 80
+  
+  load_balancer_pool:
+    type: OS::Octavia::Pool
+    depends_on: load_balancer_listener
+    properties:
+      lb_algorithm: ROUND_ROBIN
+      listener: { get_resource: load_balancer_listener }
+      loadbalancer: { get_resource: load_balancer }
+      protocol: HTTP
+
+  pool_member_1:
+    type: OS::Octavia::PoolMember
+    depends_on: load_balancer_pool
+    properties:
+      address: { get_attr: [app_1, networks, auth_app, 0]}
+      pool: { get_resource: load_balancer_pool }
+      protocol_port: 80
+      subnet: { get_resource: private_subnet }
+      weight: 1
+  
+  pool_member_2:
+    type: OS::Octavia::PoolMember
+    depends_on: load_balancer_pool
+    properties:
+      address: { get_attr: [app_2, networks, auth_app, 0]}
+      pool: { get_resource: load_balancer_pool }
+      protocol_port: 80
+      subnet: { get_resource: private_subnet }
+      weight: 1
+          
+  load_balancer_health_check:
+    type: OS::Octavia::HealthMonitor
+    depends_on: load_balancer_pool
+    properties:
+      delay: 1000
+      expected_codes: 200
+      http_method: GET
+      max_retries: 5
+      pool: { get_resource: load_balancer_pool }
+      timeout: 1000
+      type: HTTP
+      url_path: /authentiq/v1/heartbeatString
+  
+  load_balancer_floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: public
+  
+  load_balancer_floating_ip_association:
+    type: OS::Neutron::FloatingIPAssociation
+    depends_on:
+      - load_balancer_floating_ip
+      - load_balancer
+    properties:
+      floatingip_id: { get_resource: load_balancer_floating_ip }
+      port_id: { get_attr: [load_balancer, vip_port_id] }
+
+
+  # app_flavor:
+  #   type: OS::Nova::Flavor
+  #   properties:
+  #     disk: 5
+  #     is_public: false
+  #     name: App Flavor
+  #     ram: 1024
+  #     vcpus: 1
+  
+  # database_flavor:
+  #   type: OS::Nova::Flavor
+  #   properties:
+  #     disk: 20
+  #     is_public: false
+  #     name: Database Flavor
+  #     ram: 1024
+  #     vcpus: 1
+  
+  ssh_security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name: SSH
+      rules: 
+        - remote_ip_prefix: 0.0.0.0/0
+          protocol: Tcp
+          port_range_max: 22
+          port_range_min: 22
+
+  http_security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name: HTTP
+      rules: 
+        - remote_ip_prefix: 0.0.0.0/0
+          protocol: Tcp
+          port_range_max: 80
+          port_range_min: 80
+  
+  root_ssh_key:
+    type: OS::Nova::KeyPair
+    properties:
+      name: Root SSH Key
+      public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCkNi5Y9eYy7EfFDZS7KuzH68Qzlxmr6x8MhnV7OaI9XmjLwfp7f+XJynYcZsfIsl05lrIabyWcCqVBHhw6L+QM7IVQsCBnlFu9OAIEp3i1W/2+/16v/HoF2+kSnsrFQZQ5NGuBbhBNDDmPlTZJEGHQBgWDT5YxmujHuUeCzj3JiP3r6m84hcu7d8YGnhMX7UjBPdZreL7agPyZ2Bc0Eag9QWy/G03f/opYnbJolJ3kiFLKZTk1CS7dYyoQ9nSwm0bz0xBPYIjEL38S13cNQ6NArE+OEh845KlpgAWQ21oobVwsoI9i4cefO2QcoO7HMuiPLM+5pbJipZvtQNItQaImNDXaSxwWmpiFJD43MMke/xfD1QA8ahW0XW8F6imojxnrHumbs+l8G18YKZKICk9ylIJxbpMT2WT5AfhUDKxr6wjLlNRGjm0hIHYJhg0clbqKH6Na+AYnEkM/Wu7KSsWmFj+SsDZfJ2BsKWxIQv6MCQyphRQZyYXH1t+5B+pMKaM= root@cloudfum
+
+  app_1:
+    type: OS::Nova::Server
+    depends_on: mongodb
+    properties:
+      name: app_1
+      image: App
+      flavor: app
+      key_name: { get_resource: root_ssh_key }
+      networks:
+        - network: { get_resource: private_network }
+      security_groups:
+        - default
+        - { get_resource: ssh_security_group }
+        - { get_resource: http_security_group }
+      user_data: |
+        #!/bin/bash
+        echo "192.168.65.5 authentiq-db" >> /etc/hosts
+  
+  app_2:
+    type: OS::Nova::Server
+    depends_on: 
+      - mongodb
+      - app_1
+    properties:
+      name: app_2
+      image: App
+      flavor: app
+      key_name: { get_resource: root_ssh_key }
+      networks:
+        - network: { get_resource: private_network }
+      security_groups:
+        - default
+        - { get_resource: ssh_security_group }
+        - { get_resource: http_security_group }
+      user_data: |
+        #!/bin/bash
+        echo "192.168.65.5 authentiq-db" >> /etc/hosts
+        echo "root:12345678" | chpasswd
+  
+  
   mongodb:
     type: OS::Nova::Server
-    depends_on: private_subnet
+    depends_on: 
+      - private_subnet
+      - root_ssh_key
     properties:
-      flavor: min
+      flavor: database
       image: MongoDB 4.4
-      key_name: hosein
+      key_name: { get_resource: root_ssh_key }
       name: mongodb
       networks: 
         - network: { get_resource: private_network }
           fixed_ip: "192.168.65.5"
       security_groups: 
         - default
-        - ssh
+        - { get_resource: ssh_security_group }
+      user_data: |
+        #!/bin/bash
+        echo "root:12345678" | chpasswd
