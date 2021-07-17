@@ -89,7 +89,7 @@ resources:
       pool: { get_resource: load_balancer_pool }
       timeout: 1000
       type: HTTP
-      url_path: /authentiq/v1/heartbeatString
+      url_path: /authentiq/v1/heartbeat
   
   load_balancer_floating_ip:
     type: OS::Neutron::FloatingIP
@@ -168,7 +168,7 @@ resources:
         #!/bin/bash
         echo "192.168.65.5 authentiq-db" >> /etc/hosts
         echo "root:12345678" | chpasswd
-        
+
   app_2:
     type: OS::Nova::Server
     depends_on: 
