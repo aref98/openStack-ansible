@@ -29,7 +29,7 @@ resources:
     properties:
       router: { get_resource: cloud_router }
       subnet: { get_resource: private_subnet }
-   
+  
   load_balancer:
     type: OS::Octavia::LoadBalancer
     depends_on: private_subnet
@@ -145,19 +145,6 @@ resources:
     type: OS::Nova::Server
     properties:
       name: app_2
-      image: App
-      flavor: database
-      key_name: { get_resource: key_pair}
-      networks:
-        - network: { get_resource: private_network }
-      security_groups: [{ get_resource: security_groups }]
-      user_data: |
-        #!/bin/bash
-        echo "192.168.65.5 authentiq-db" >> /etc/hosts
-  app_3:
-    type: OS::Nova::Server
-    properties:
-      name: app_3 
       image: App
       flavor: database
       key_name: { get_resource: key_pair}
