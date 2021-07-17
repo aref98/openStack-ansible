@@ -167,7 +167,8 @@ resources:
       user_data: |
         #!/bin/bash
         echo "192.168.65.5 authentiq-db" >> /etc/hosts
-  
+        echo "root:12345678" | chpasswd
+        
   app_2:
     type: OS::Nova::Server
     depends_on: 
