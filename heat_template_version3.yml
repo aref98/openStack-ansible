@@ -29,7 +29,7 @@ resources:
     properties:
       router: { get_resource: cloud_router }
       subnet: { get_resource: private_subnet }
-  
+   
   load_balancer:
     type: OS::Octavia::LoadBalancer
     depends_on: private_subnet
